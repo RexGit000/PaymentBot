@@ -3,6 +3,11 @@ const { Markup } = require('telegraf');
 const { botCache } = require('../cache');
 const { consumePendingInvoice } = require('./start');
 
+function md(s) {
+  if (s == null) return '';
+  return String(s).replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
+}
+
 async function notifyPaymentSuccessToBot(botUsername, payload) {
   try {
     const botDoc = botCache.getByUsername(botUsername);
@@ -84,14 +89,14 @@ module.exports = (bot) => {
         const backLink = `https://t.me/${botDisplay}`;
         await ctx.reply(
           `✅ *Payment Successful!* 🎉\n\n` +
-          `💰 Amount: *${payload.amount} Stars* ⭐\n` +
-          `📦 Package: *${payload.packageName}*\n` +
-          `🎬 Media items: *${payload.mediaCount}*\n\n` +
+          `💰 Amount: *${md(payload.amount)} Stars* ⭐\n` +
+          `📦 Package: *${md(payload.packageName)}*\n` +
+          `🎬 Media items: *${md(payload.mediaCount)}*\n\n` +
           `📨 Your media is being delivered to you now!`,
           {
             parse_mode: 'Markdown',
             ...Markup.inlineKeyboard([
-              [Markup.button.url(`🔙 Return to @${botDisplay}`, backLink)],
+              [Markup.button.url(`🔙 Return to @${md(botDisplay)}`, backLink)],
             ]),
           }
         );

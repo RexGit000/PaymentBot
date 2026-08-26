@@ -22,7 +22,8 @@ function botsInlineKeyboard(bots) {
 
 function botActionsKeyboard(botId) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('✏ Edit Bot', `bot_edit:${botId}`)],
+    [Markup.button.callback('✏ Edit Username', `bot_edit_field:${botId}:botUsername`)],
+    [Markup.button.callback('🔗 Edit API URL', `bot_edit_field:${botId}:apiUrl`)],
     [Markup.button.callback('🗑 Delete Bot', `bot_delete_confirm:${botId}`)],
     [Markup.button.callback('« Back to Bots List', 'bots_list')],
   ]);

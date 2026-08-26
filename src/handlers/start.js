@@ -17,6 +17,15 @@ const TEST_MODE = process.env.TEST_MODE === 'true' || process.env.TEST_MODE === 
 const crypto = require('crypto');
 const pendingInvoices = new Map();
 
+function md(s) {
+  if (s == null) return '';
+  return String(s).replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
+}
+function mdCode(s) {
+  if (s == null) return '';
+  return String(s).replace(/([`\\])/g, '\\$1');
+}
+
 function registerPendingInvoice(payload) {
   const txnId = crypto.randomBytes(8).toString('hex');
   pendingInvoices.set(txnId, { ...payload, createdAt: Date.now() });
@@ -168,9 +177,9 @@ module.exports = (bot) => {
               if (TEST_MODE) {
                 await ctx.reply(
                   `🧪 *TEST MODE ACTIVE* 🧪\n\n` +
-                  `📦 *${invoicePayload.packageName}*\n` +
-                  `💰 Amount: *${invoicePayload.amount} Stars* ⭐\n` +
-                  `🎬 Media items: *${invoicePayload.mediaCount}*\n\n` +
+                  `📦 *${md(invoicePayload.packageName)}*\n` +
+                  `💰 Amount: *${md(invoicePayload.amount)} Stars* ⭐\n` +
+                  `🎬 Media items: *${md(invoicePayload.mediaCount)}*\n\n` +
                   `⏭️ Skipping Stars payment and auto-confirming...`,
                   { parse_mode: 'Markdown' }
                 );
@@ -191,14 +200,14 @@ module.exports = (bot) => {
                 if (notifyResult && notifyResult.ok) {
                   await ctx.reply(
                     `✅ *Test Payment Successful!* 🎉\n\n` +
-                    `💰 Amount: *${invoicePayload.amount} Stars* ⭐\n` +
-                    `📦 Package: *${invoicePayload.packageName}*\n` +
-                    `🎬 Media items: *${invoicePayload.mediaCount}*\n\n` +
+                    `💰 Amount: *${md(invoicePayload.amount)} Stars* ⭐\n` +
+                    `📦 Package: *${md(invoicePayload.packageName)}*\n` +
+                    `🎬 Media items: *${md(invoicePayload.mediaCount)}*\n\n` +
                     `📨 Your media is being delivered to you now!`,
                     {
                       parse_mode: 'Markdown',
                       ...Markup.inlineKeyboard([
-                        [Markup.button.url(`🔙 Return to @${botDisplay}`, backLink)],
+                        [Markup.button.url(`🔙 Return to @${md(botDisplay)}`, backLink)],
                       ]),
                     }
                   );
@@ -246,10 +255,10 @@ module.exports = (bot) => {
         const adminCount = await Admin.countDocuments();
         const testBadge = TEST_MODE ? ' 🧪 TEST' : '';
         await ctx.reply(
-          `👋 Welcome back, ${first_name}!${testBadge}\n\n` +
+          `👋 Welcome back, ${md(first_name)}!${testBadge}\n\n` +
           `🔧 *Admin Panel*\n\n` +
-          `🤖 Authorized Bots: *${botCount}*\n` +
-          `👥 Total Admins: *${adminCount}*\n\n` +
+          `🤖 Authorized Bots: *${md(botCount)}*\n` +
+          `👥 Total Admins: *${md(adminCount)}*\n\n` +
           `Use the keyboard below to manage bots and admins.`,
           { parse_mode: 'Markdown', ...mainAdminKeyboard() }
         );
@@ -321,10 +330,10 @@ module.exports = (bot) => {
       if (!b) { await ctx.editMessageText('Bot not found.'); return; }
       await ctx.editMessageText(
         `🤖 *Bot Details*\n\n` +
-        `Username: @${b.botUsername.replace(/^@/, '')}\n` +
-        `API URL: \`${b.apiUrl}\`\n` +
+        `Username: @${md(b.botUsername.replace(/^@/, ''))}\n` +
+        `API URL: \`${mdCode(b.apiUrl)}\`\n` +
         `Status: ${b.isActive ? '✅ Active' : '❌ Inactive'}\n` +
-        `Added: ${b.createdAt.toDateString()}`,
+        `Added: ${md(b.createdAt.toDateString())}`,
         { parse_mode: 'Markdown', ...botActionsKeyboard(b._id) }
       );
     } catch (err) {
@@ -332,17 +341,25 @@ module.exports = (bot) => {
     }
   });
 
-  bot.action(/^bot_edit:(.+)$/, async (ctx) => {
+  bot.action(/^bot_edit_field:(.+):(botUsername|apiUrl)$/, async (ctx) => {
     if (!ctx.state.isAdmin) return;
     try {
       await ctx.answerCbQuery();
-      pending[ctx.from.id] = { type: 'bot_edit', step: 1, botId: ctx.match[1] };
+      const botId = ctx.match[1];
+      const field = ctx.match[2];
+      const b = await AuthorizedBot.findById(botId).lean();
+      if (!b) { await ctx.editMessageText('Bot not found.'); return; }
+      pending[ctx.from.id] = { type: 'bot_edit_field', botId, field };
+      const label = field === 'botUsername' ? 'Username' : 'API URL';
+      const current = field === 'botUsername'
+        ? `@${md(b.botUsername.replace(/^@/, ''))}`
+        : `\`${mdCode(b.apiUrl)}\``;
       await ctx.editMessageText(
-        '✏ *Edit Bot*\n\nStep 1/2: Send the NEW bot username (e.g. @rexmediatgbot)',
+        `✏ *Edit ${label}*\n\nCurrent: ${current}\n\nSend the new ${label.toLowerCase()} now.`,
         { parse_mode: 'Markdown', ...cancelInlineKeyboard('bot_cancel') }
       );
     } catch (err) {
-      console.error('[bot edit]', err.message);
+      console.error('[bot edit field]', err.message);
     }
   });
 
@@ -439,10 +456,10 @@ module.exports = (bot) => {
         (a.username && ctx.from.username && a.username.toLowerCase() === `@${ctx.from.username}`.toLowerCase());
       await ctx.editMessageText(
         `🛡 *Admin Details*\n\n` +
-        `ID: ${a.telegramId || 'Not set'}\n` +
-        `Username: ${a.username || 'Not set'}\n` +
+        `ID: ${md(a.telegramId || 'Not set')}\n` +
+        `Username: ${a.username ? md(a.username) : 'Not set'}\n` +
         `Super Admin: ${a.isSuperAdmin ? '✅ Yes' : '❌ No'}\n` +
-        `Added: ${a.createdAt.toDateString()}`,
+        `Added: ${md(a.createdAt.toDateString())}`,
         { parse_mode: 'Markdown', ...adminActionsKeyboard(a._id, isSelf) }
       );
     } catch (err) {
@@ -509,8 +526,8 @@ module.exports = (bot) => {
       const testBadge = TEST_MODE ? ' 🧪 TEST' : '';
       await ctx.reply(
         `🔧 *Admin Panel*${testBadge}\n\n` +
-        `🤖 Authorized Bots: *${botCount}*\n` +
-        `👥 Total Admins: *${adminCount}*`,
+        `🤖 Authorized Bots: *${md(botCount)}*\n` +
+        `👥 Total Admins: *${md(adminCount)}*`,
         { parse_mode: 'Markdown', ...mainAdminKeyboard() }
       );
     } catch (err) {
@@ -528,9 +545,9 @@ module.exports = (bot) => {
       await ctx.reply(
         `📊 *Bot Stats*\n\n` +
         testBadge +
-        `🤖 Total Bots: *${botCount}*\n\n` +
-        `👥 Total Admins: *${adminCount}*\n` +
-        `👑 Super Admins: *${superAdminCount}*`,
+        `🤖 Total Bots: *${md(botCount)}*\n\n` +
+        `👥 Total Admins: *${md(adminCount)}*\n` +
+        `👑 Super Admins: *${md(superAdminCount)}*`,
         { parse_mode: 'Markdown' }
       );
     } catch (err) {
@@ -566,11 +583,11 @@ module.exports = (bot) => {
           });
           botCache.add(newBot.toObject());
           await ctx.reply(
-            `✅ Bot added successfully!\n\n@${newBot.botUsername}\nAPI: \`${newBot.apiUrl}\``,
+            `✅ Bot added successfully!\n\n@${md(newBot.botUsername.replace(/^@/, ''))}\nAPI: \`${mdCode(newBot.apiUrl)}\``,
             { parse_mode: 'Markdown' }
           );
         } catch (err) {
-          await ctx.reply(`❌ Error: ${err.message}`);
+          await ctx.reply(`❌ Error: ${md(err.message)}`);
         } finally {
           delete pending[uid];
         }
@@ -578,38 +595,30 @@ module.exports = (bot) => {
       }
     }
 
-    if (p.type === 'bot_edit') {
-      if (p.step === 1) {
-        p.botUsername = text.replace(/^@/, '');
-        p.step = 2;
+    if (p.type === 'bot_edit_field') {
+      try {
+        const field = p.field;
+        const value = field === 'botUsername' ? text.replace(/^@/, '') : text;
+        const updated = await AuthorizedBot.findByIdAndUpdate(
+          p.botId,
+          { [field]: value },
+          { new: true }
+        ).lean();
+        botCache.update(updated);
+        const label = field === 'botUsername' ? 'Username' : 'API URL';
+        const display = field === 'botUsername'
+          ? `@${md(updated.botUsername.replace(/^@/, ''))}`
+          : `\`${mdCode(updated.apiUrl)}\``;
         await ctx.reply(
-          'Step 2/2: Send the NEW API URL',
-          cancelInlineKeyboard('bot_cancel')
+          `✅ ${md(label)} updated successfully!\n\nNew: ${display}`,
+          { parse_mode: 'Markdown' }
         );
-        return;
+      } catch (err) {
+        await ctx.reply(`❌ Error: ${md(err.message)}`);
+      } finally {
+        delete pending[uid];
       }
-      if (p.step === 2) {
-        try {
-          const updated = await AuthorizedBot.findByIdAndUpdate(
-            p.botId,
-            {
-              botUsername: p.botUsername,
-              apiUrl: text,
-            },
-            { new: true }
-          ).lean();
-          botCache.update(updated);
-          await ctx.reply(
-            `✅ Bot updated successfully!\n\n@${updated.botUsername}\nAPI: \`${updated.apiUrl}\``,
-            { parse_mode: 'Markdown' }
-          );
-        } catch (err) {
-          await ctx.reply(`❌ Error: ${err.message}`);
-        } finally {
-          delete pending[uid];
-        }
-        return;
-      }
+      return;
     }
 
     if (p.type === 'admin_add') {
