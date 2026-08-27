@@ -156,11 +156,36 @@ module.exports = (bot) => {
         console.log(`[start] parsed = ${parsed ? JSON.stringify(parsed) : 'null (UNRECOGNIZED FORMAT)'}`);
         if (parsed) {
           const botUsername = parsed.botUsername || parsed.bot;
-          const botDoc = botCache.getByUsername(botUsername);
+          let botDoc = botCache.getByUsername(botUsername);
+          if (!botDoc) {
+            try {
+              const db = require('../models');
+              const norm = String(botUsername).toLowerCase().replace(/^@/, '');
+              const dbBot = await db.AuthorizedBot.findOne({
+                $or: [
+                  { botUsername: norm },
+                  { botUsername: '@' + norm },
+                ],
+                isActive: true,
+              }).lean();
+              if (dbBot) {
+                botDoc = dbBot;
+                botCache.update(botDoc);
+                console.log(`[start] bot="${botUsername}" recovered via DB fallback`);
+              }
+            } catch (err) {
+              console.error('[start] DB fallback error:', err.message);
+            }
+          }
           console.log(`[start] bot="${botUsername}" cached=${!!botDoc}`);
           if (botDoc) {
             console.log(`[start] calling verify (format=${parsed.format}) @ ${botDoc.apiUrl}`);
-            const verified = await verifyOrderWithBot(botDoc, parsed);
+            let verified = null;
+            try {
+              verified = await verifyOrderWithBot(botDoc, parsed);
+            } catch (err) {
+              console.error('[start] verify exception:', err.message);
+            }
             console.log(`[start] verify result = ${verified ? JSON.stringify(verified) : 'FAILED/NULL'}`);
             if (verified) {
               const amount = Number(verified.amount);
@@ -237,6 +262,8 @@ module.exports = (bot) => {
               console.log(`[start] invoice sent`);
               return;
             }
+          } else {
+            console.log(`[start] VERIFY FAILED -> bot="${botUsername}" lookup=${botDoc ? 'OK (bot found)' : 'MISS (bot NOT in AuthorizedBot DB/cache — CRUD username mismatch vs botInfo.username)'} verify=${botDoc ? (verified ? 'OK' : 'FAILED/NULL — belonging bot /api/verify-token or /api/verify-order returned non-ok/non-json/!ok') : 'SKIPPED'}`);
           }
           console.log(`[start] VERIFY FAILED -> sending "Invalid request"`);
           if (!isAdmin) {
