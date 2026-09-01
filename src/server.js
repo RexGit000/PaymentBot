@@ -7,6 +7,8 @@ const { adminCache, botCache } = require('./cache');
 const { seedAdmins } = require('./seed');
 
 const PORT = Number(process.env.port || process.env.PORT || 3000);
+const SELF_URL = (process.env.SELF_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/$/, '');
+const KEEPALIVE_INTERVAL_MS = 5 * 60 * 1000;
 
 process.on('uncaughtException', (err) => {
   console.error('[uncaughtException]', err);
@@ -21,6 +23,8 @@ app.use(express.json());
 
 let pingCount = 0;
 let lastPingAt = null;
+let lastSelfPingAt = null;
+let lastSelfPingOk = false;
 
 app.get('/ping', (req, res) => {
   pingCount += 1;
@@ -40,6 +44,9 @@ app.get('/stats', (_req, res) => {
     uptimeSec: Math.floor(process.uptime()),
     pingCount,
     lastPingAt: lastPingAt ? lastPingAt.toISOString() : null,
+    lastSelfPingAt: lastSelfPingAt ? lastSelfPingAt.toISOString() : null,
+    lastSelfPingOk,
+    selfUrl: SELF_URL || null,
     memory: {
       rss: mem.rss,
       heapUsed: mem.heapUsed,
@@ -99,8 +106,32 @@ async function boot() {
       if (err?.message !== 'Aborted') console.error('[bot]', err);
     });
     console.log('[bot] long-poll launched — receiving updates');
+
+    if (SELF_URL) {
+      const doSelfPing = async () => {
+        try {
+          const res = await fetch(`${SELF_URL}/ping`, { cache: 'no-store' });
+          lastSelfPingAt = new Date();
+          lastSelfPingOk = res.ok && res.status === 200;
+          if (!lastSelfPingOk) console.warn(`[keepalive] self-ping non-200 (status=${res.status})`);
+          else console.log(`[keepalive] self-ping ok @${SELF_URL}/ping`);
+        } catch (err) {
+          lastSelfPingAt = new Date();
+          lastSelfPingOk = false;
+          console.warn('[keepalive] self-ping failed:', err.message);
+        }
+      };
+      doSelfPing();
+      setInterval(doSelfPing, KEEPALIVE_INTERVAL_MS);
+    } else {
+      console.warn('[keepalive] SELF_URL / RENDER_EXTERNAL_URL not set — skip self-ping');
+    }
   } catch (err) {
     console.error('[boot error]', err.message);
+    if (SELF_URL) {
+      console.warn('[boot] will retry boot in 15s while keeping HTTP server alive…');
+      setTimeout(boot, 15 * 1000);
+    }
   }
 }
 
