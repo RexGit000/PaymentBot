@@ -159,9 +159,8 @@ module.exports = (bot) => {
           let botDoc = botCache.getByUsername(botUsername);
           if (!botDoc) {
             try {
-              const db = require('../models');
               const norm = String(botUsername).toLowerCase().replace(/^@/, '');
-              const dbBot = await db.AuthorizedBot.findOne({
+              const dbBot = await AuthorizedBot.findOne({
                 $or: [
                   { botUsername: norm },
                   { botUsername: '@' + norm },
