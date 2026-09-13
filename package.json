@@ -4,8 +4,8 @@
   "description": "Rex Payment Bot - Centralized Stars Payments",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
+    "start": "node api.js && node src/server.js",
+    "dev": "node api.js && node --watch src/server.js",
     "seed": "node src/seed.js",
     "seed:admins": "node src/seed.js --admins-only"
   },
